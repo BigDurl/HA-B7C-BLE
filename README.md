@@ -1,24 +1,17 @@
 # Aputure B7c BLE for Home Assistant
 
-Experimental local Bluetooth control for Aputure Accent B7c bulbs: on/off,
+Bluetooth control for Aputure Accent B7c bulbs: on/off,
 brightness, white temperature and hue/saturation. No cloud or phone is needed.
-
-**Status:** the underlying mesh and light commands were tested with two
-B7c bulbs using a standalone Linux controller. This Home Assistant integration
-has not yet been tested on a running Home Assistant installation or with a
-bulb. Treat it as experimental and do not assume production reliability.
 
 ## Requirements
 
 - Home Assistant 2026.10.4 or later with an available Bluetooth adapter or an
   active-connection Bluetooth proxy in range of each bulb.
 - A factory-reset B7c. Provisioning **removes it from its previous mesh**,
-  including Sidus Link or the standalone controller. Each bulb must be reset
+  including Sidus Link or standalone controller. Each bulb must be reset
   and added separately; this integration cannot import existing mesh keys.
 
 ## Marketplace installation
-
-Once the repository is public:
 
 1. In Home Assistant, go to **Settings → Marketplace → Add from link**.
 2. Connect GitHub if requested and add
