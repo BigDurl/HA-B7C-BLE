@@ -15,8 +15,6 @@ bulb. Treat it as experimental and do not assume production reliability.
 - A factory-reset B7c. Provisioning **removes it from its previous mesh**,
   including Sidus Link or the standalone controller. Each bulb must be reset
   and added separately; this integration cannot import existing mesh keys.
-- A public GitHub repository containing this project, for Marketplace use.
-  The repository is not available until it has actually been published.
 
 ## Marketplace installation
 
