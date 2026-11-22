@@ -32,6 +32,16 @@ integration does not provide mesh group addressing or proxy relaying.
 Commands are unacknowledged, and the entity state is optimistic. If the
 bulb is changed outside Home Assistant, the displayed state may be stale.
 
+After Home Assistant starts or the integration is reloaded, it reapplies each
+bulb's last saved on/off state and, when on, its brightness and color. The last
+brightness and color are also remembered while a bulb is off. This can change
+a bulb that was adjusted while Home Assistant was offline. If no valid saved
+state is available, no default is sent at startup. The previous integration
+version did not save light settings, so set each bulb after upgrading to
+establish a state to restore. Restore failures are logged; commands remain
+unacknowledged. Home Assistant periodically saves restore state and saves it
+at a clean shutdown, so an abrupt interruption may lose recent changes.
+
 The private `.storage/b7c_ble_<address>` file in Home Assistant's config
 directory holds the network, application, and device keys and sequence
 numbers. Do not share it. The device key is saved before provisioning data
@@ -50,7 +60,7 @@ add it again. Removing keys without resetting can strand the bulb. To return
 to Sidus Link, factory-reset it and add it there.
 
 Bluetooth connection failures are surfaced to Home Assistant. The integration
-reuses each bulb's connection during adjustments and disconnects after 10
+reuses each bulb's connection during adjustments and disconnects after 60
 seconds of inactivity. Rapid pending adjustments are combined, while on/off
 commands stay ordered. The first adjustment still requires a connection, and
 multiple bulbs may briefly occupy multiple Bluetooth connection slots.
