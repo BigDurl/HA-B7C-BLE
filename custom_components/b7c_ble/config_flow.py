@@ -20,12 +20,12 @@ _PROVISIONING: set[str] = set()
 
 
 def is_b7c(info: BluetoothServiceInfoBleak) -> bool:
-    """Identify a B7c by the product identifier in its device UUID."""
+    """Identify a B7C by the product identifier in its device UUID."""
     return info.service_data.get(PROVISIONING_UUID, b"").startswith(b"04005-")
 
 
-class B7cConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Commission a single B7c into its own mesh."""
+class B7CConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Commission a single B7C into its own mesh."""
 
     VERSION = 1
 
@@ -101,9 +101,9 @@ class B7cConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     await client.disconnect()
                 state["provisioning"] = "complete"
                 await store.async_save(state)
-            return self.async_create_entry(title=f"Aputure B7c ({address[-8:]})", data={"address": address})
+            return self.async_create_entry(title=f"Aputure B7C ({address[-8:]})", data={"address": address})
         except (BleakError, ProvisioningError, TimeoutError, OSError) as err:
-            _LOGGER.warning("B7c provisioning failed for %s: %s", address, err)
+            _LOGGER.warning("B7C provisioning failed for %s: %s", address, err)
             saved = await store.async_load()
             reason = "provisioning_uncertain" if saved and "device_key" in saved else "provisioning_failed"
             return self.async_show_form(step_id="confirm", errors={"base": reason},

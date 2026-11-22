@@ -25,7 +25,7 @@ from .mesh import protocol
 _LOGGER = logging.getLogger(__name__)
 
 
-class B7cStoredData(ExtraStoredData):
+class B7CStoredData(ExtraStoredData):
     """Keep light settings even while Home Assistant reports the light as off."""
 
     def __init__(self, brightness, color_mode, kelvin, hs):
@@ -51,10 +51,10 @@ def hsi_payload(hue, saturation, intensity):
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([B7cLight(entry)])
+    async_add_entities([B7CLight(entry)])
 
 
-class B7cLight(LightEntity, RestoreEntity):
+class B7CLight(LightEntity, RestoreEntity):
     """An optimistic light; the bulb does not acknowledge light commands."""
 
     _attr_has_entity_name = True
@@ -72,7 +72,7 @@ class B7cLight(LightEntity, RestoreEntity):
             identifiers={(DOMAIN, entry.unique_id)},
             name=entry.title,
             manufacturer="Aputure",
-            model="Accent B7c",
+            model="Accent B7C",
         )
         self._attr_is_on = None
         self._attr_brightness = 128
@@ -86,7 +86,7 @@ class B7cLight(LightEntity, RestoreEntity):
 
     @property
     def extra_restore_state_data(self):
-        return B7cStoredData(
+        return B7CStoredData(
             self._attr_brightness, self._attr_color_mode,
             self._attr_color_temp_kelvin, self._attr_hs_color,
         )
@@ -118,10 +118,10 @@ class B7cLight(LightEntity, RestoreEntity):
             if valid_hs:
                 self._attr_hs_color = tuple(hs)
         elif state.state == STATE_ON:
-            _LOGGER.warning("Cannot restore B7c %s: saved light settings are missing or invalid", self.entity_id)
+            _LOGGER.warning("Cannot restore B7C %s: saved light settings are missing or invalid", self.entity_id)
             return
         else:
-            _LOGGER.warning("B7c %s has no saved color or brightness settings", self.entity_id)
+            _LOGGER.warning("B7C %s has no saved color or brightness settings", self.entity_id)
         self._attr_is_on = state.state == STATE_ON
         self.async_on_remove(async_at_started(self.hass, self._restore_after_start))
 
@@ -134,7 +134,7 @@ class B7cLight(LightEntity, RestoreEntity):
             else:
                 await self._enqueue(False, {})
         except HomeAssistantError as err:
-            _LOGGER.warning("Could not restore B7c %s after startup: %s", self.entity_id, err)
+            _LOGGER.warning("Could not restore B7C %s after startup: %s", self.entity_id, err)
 
     async def async_turn_on(self, **kwargs):
         self._user_action = True

@@ -35,7 +35,7 @@ class ReservedSession(MeshSession):
         return sequence
 
 
-class B7cController:
+class B7CController:
     """A device-local mesh with durable sequence reservations."""
 
     def __init__(self, hass, address, store, state):
@@ -54,7 +54,7 @@ class B7cController:
     async def _session(self):
         device = bluetooth.async_ble_device_from_address(self.hass, self.address, connectable=True)
         if device is None:
-            raise HomeAssistantError(f"B7c {self.address} is not available over Bluetooth")
+            raise HomeAssistantError(f"B7C {self.address} is not available over Bluetooth")
         for attempt in range(2):
             client = await establish_connection(
                 BleakClientWithServiceCache, device, f"{DOMAIN}-{self.address}",
@@ -64,7 +64,7 @@ class B7cController:
                 start = self.state["next_sequence"]
                 end = start + SEQUENCE_BLOCK
                 if end > SEQUENCE_LIMIT:
-                    raise HomeAssistantError("B7c mesh sequence space exhausted; reset and re-add the bulb")
+                    raise HomeAssistantError("B7C mesh sequence space exhausted; reset and re-add the bulb")
                 self.state["next_sequence"] = end
                 await self.store.async_save(self.state)
                 device_key = bytes.fromhex(self.state["device_key"])
@@ -81,7 +81,7 @@ class B7cController:
                     if attempt or str(err.char_specifier).lower() != CHAR_PROXY_DATA_OUT:
                         raise
                     _LOGGER.warning(
-                        "B7c %s is missing the mesh proxy characteristic; reconnecting without cached services",
+                        "B7C %s is missing the mesh proxy characteristic; reconnecting without cached services",
                         self.address,
                     )
                     continue
@@ -105,7 +105,7 @@ class B7cController:
                           for element in composition.elements
                           for company, model in element.vendor_models]
                 if not models:
-                    raise HomeAssistantError("B7c returned no vendor model")
+                    raise HomeAssistantError("B7C returned no vendor model")
                 await session.add_app_key(NODE_ADDRESS, key)
                 for element, company, model in models:
                     await session.bind_model(NODE_ADDRESS, key, element, model, company_id=company)
@@ -134,7 +134,7 @@ class B7cController:
             try:
                 await self._disconnect()
             except (BleakError, TimeoutError, OSError) as err:
-                _LOGGER.warning("Could not disconnect idle B7c %s: %s", self.address, err)
+                _LOGGER.warning("Could not disconnect idle B7C %s: %s", self.address, err)
 
     def _schedule_idle_disconnect(self):
         self._cancel_idle()
@@ -155,7 +155,7 @@ class B7cController:
     async def send(self, *payloads):
         async with self._lock:
             if self._closed:
-                raise HomeAssistantError(f"B7c {self.address} is unloading")
+                raise HomeAssistantError(f"B7C {self.address} is unloading")
             self._cancel_idle()
             sent = False
             try:
@@ -181,11 +181,11 @@ class B7cController:
                     await session.send_access(NODE_ADDRESS, protocol.VENDOR_OPCODE, payload)
                 sent = True
             except (BleakError, MeshSessionError, TimeoutError, OSError) as err:
-                raise HomeAssistantError(f"Could not send to B7c {self.address}: {err}") from err
+                raise HomeAssistantError(f"Could not send to B7C {self.address}: {err}") from err
             finally:
                 if not sent:
                     try:
                         await self._disconnect()
                     except (BleakError, TimeoutError, OSError) as cleanup_err:
-                        _LOGGER.warning("Could not disconnect B7c %s: %s", self.address, cleanup_err)
+                        _LOGGER.warning("Could not disconnect B7C %s: %s", self.address, cleanup_err)
             self._schedule_idle_disconnect()

@@ -26,7 +26,7 @@ def sleep(on):
 def cct(intensity, cct_deci_kelvin):
     """Build a neutral green/magenta CCT message."""
     if not 200 <= cct_deci_kelvin <= 1000:
-        raise ValueError("B7c CCT must be 2000 to 10000 K")
+        raise ValueError("B7C CCT must be 2000 to 10000 K")
     return pack([
         (0, 8), (1, 1), (0, 20), (0, 13), (0, 1), (0, 1), (0, 1),
         (10, 7), (cct_deci_kelvin, 10), (intensity, 10), (2, 7), (1, 1),

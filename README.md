@@ -17,8 +17,8 @@ brightness, white temperature and hue/saturation. No cloud or phone is needed.
 2. Connect GitHub if requested and add
    `https://github.com/BigDurl/HA-B7C-BLE` as an integration.
 3. Install it and restart Home Assistant if prompted.
-4. Factory-reset one B7c, then use **Settings → Devices & services → Add
-   integration → Aputure B7c BLE**. Select the bulb and confirm provisioning.
+4. Factory-reset one B7C, then use **Settings → Devices & services → Add
+   integration → Aputure B7C BLE**. Select the bulb and confirm provisioning.
 5. Repeat for each additional reset bulb.
 
 The Marketplace's **Add from link** supports custom public repositories; this

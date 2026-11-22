@@ -8,8 +8,8 @@ import pytest
 from bleak.exc import BleakCharacteristicNotFoundError, BleakError
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.b7c_ble.controller import B7cController, ReservedSession
-from custom_components.b7c_ble.light import B7cLight, hsi_payload
+from custom_components.b7c_ble.controller import B7CController, ReservedSession
+from custom_components.b7c_ble.light import B7CLight, hsi_payload
 from custom_components.b7c_ble.mesh import protocol
 from custom_components.b7c_ble.mesh.crypto import EcdhKeyPair, PRCK, aes_cmac, k1, s1
 from custom_components.b7c_ble.mesh.pdu import ProxyReassembler
@@ -136,7 +136,7 @@ async def test_sequence_is_reserved_before_any_mesh_send(tmp_path):
         patch("custom_components.b7c_ble.controller.establish_connection", new=AsyncMock(return_value=client)),
         patch.object(store, "async_save", new=AsyncMock(side_effect=OSError("disk failure"))),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         with pytest.raises(OSError, match="disk failure"):
             async with controller._session():
                 pass
@@ -166,7 +166,7 @@ async def test_missing_proxy_characteristic_retries_without_cached_services(tmp_
         patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
         patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         if retry_succeeds:
             async with controller._session():
                 pass
@@ -194,7 +194,7 @@ async def test_other_missing_characteristic_is_not_retried(tmp_path):
         patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
         patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         with pytest.raises(BleakCharacteristicNotFoundError):
             async with controller._session():
                 pass
@@ -216,7 +216,7 @@ async def test_missing_characteristic_after_session_start_is_not_retried(tmp_pat
         patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
         patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         with pytest.raises(BleakCharacteristicNotFoundError):
             async with controller._session():
                 raise BleakCharacteristicNotFoundError(CHAR_PROXY_DATA_OUT)
@@ -293,7 +293,7 @@ def test_color_payload_matches_tested_reference():
 async def test_light_does_not_update_optimistic_state_after_failed_send():
     controller = SimpleNamespace(send=AsyncMock(side_effect=OSError("Bluetooth failed")))
     entry = SimpleNamespace(unique_id="AA:BB:CC:DD:EE:FF", runtime_data=controller, title="Test")
-    light = B7cLight(entry)
+    light = B7CLight(entry)
     with patch.object(light, "async_write_ha_state"):
         with pytest.raises(OSError, match="Bluetooth failed"):
             await light.async_turn_on(hs_color=(120, 100), brightness=102)
@@ -320,7 +320,7 @@ async def test_connection_reused_then_closed_when_idle(tmp_path):
         patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
         patch("custom_components.b7c_ble.controller.IDLE_DISCONNECT_SECONDS", 0.02),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         await controller.send(protocol.sleep(True))
         sequence = controller._active_session.sequence
         old_generation = controller._idle_generation
@@ -353,7 +353,7 @@ async def test_connection_reconnects_after_drop_and_write_failure(tmp_path):
         patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
         patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         await controller.send(protocol.sleep(True))
         clients[0].is_connected = False
         await controller.send(protocol.sleep(True))
@@ -381,7 +381,7 @@ async def test_connection_reopens_before_reserved_sequences_are_exhausted(tmp_pa
         patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
         patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
     ):
-        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        controller = B7CController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
         await controller.send(protocol.sleep(True))
         end = controller._active_session._end
         controller._active_session._sequence = end - 31
@@ -404,7 +404,7 @@ async def test_adjustment_queue_merges_pending_values_and_preserves_power_order(
 
     controller = SimpleNamespace(send=AsyncMock(side_effect=send))
     entry = SimpleNamespace(unique_id="AA:BB:CC:DD:EE:FF", runtime_data=controller, title="Test")
-    light = B7cLight(entry)
+    light = B7CLight(entry)
     with patch.object(light, "async_write_ha_state"):
         first = asyncio.create_task(light.async_turn_on(brightness=50))
         await started.wait()
@@ -441,7 +441,7 @@ async def test_coalesced_callers_receive_send_failure():
 
     controller = SimpleNamespace(send=AsyncMock(side_effect=send))
     entry = SimpleNamespace(unique_id="AA:BB:CC:DD:EE:FF", runtime_data=controller, title="Test")
-    light = B7cLight(entry)
+    light = B7CLight(entry)
     with patch.object(light, "async_write_ha_state"):
         first = asyncio.create_task(light.async_turn_on(brightness=50))
         await started.wait()

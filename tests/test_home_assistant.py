@@ -29,10 +29,10 @@ async def test_setup_and_light_service(hass, enable_custom_integrations, mock_bl
         "device_key": "22" * 16, "configured": True,
     })
     entry = MockConfigEntry(
-        domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address}
+        domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address}
     )
     entry.add_to_hass(hass)
-    with patch("custom_components.b7c_ble.controller.B7cController.send", new=AsyncMock()) as send:
+    with patch("custom_components.b7c_ble.controller.B7CController.send", new=AsyncMock()) as send:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         state = hass.states.get("light.test_b7c")
@@ -54,7 +54,7 @@ async def test_concurrent_light_services_coalesce(hass, enable_custom_integratio
         "next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
         "device_key": "22" * 16, "configured": True,
     })
-    entry = MockConfigEntry(domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address})
+    entry = MockConfigEntry(domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address})
     entry.add_to_hass(hass)
     started = asyncio.Event()
     release = asyncio.Event()
@@ -64,7 +64,7 @@ async def test_concurrent_light_services_coalesce(hass, enable_custom_integratio
             started.set()
             await release.wait()
 
-    with patch("custom_components.b7c_ble.controller.B7cController.send", new=AsyncMock(side_effect=send)) as send_mock:
+    with patch("custom_components.b7c_ble.controller.B7CController.send", new=AsyncMock(side_effect=send)) as send_mock:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -111,9 +111,9 @@ async def test_startup_reapplies_saved_on_state(
         State("light.test_b7c", "on"),
         {"brightness": 180, "color_mode": mode, **color},
     )])
-    entry = MockConfigEntry(domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address})
+    entry = MockConfigEntry(domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address})
     entry.add_to_hass(hass)
-    with patch("custom_components.b7c_ble.controller.B7cController.send", new=AsyncMock()) as send:
+    with patch("custom_components.b7c_ble.controller.B7CController.send", new=AsyncMock()) as send:
         assert await hass.config_entries.async_setup(entry.entry_id)
         hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
         await hass.async_block_till_done()
@@ -134,9 +134,9 @@ async def test_off_state_retains_color_and_brightness_across_reload(
         "next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
         "device_key": "22" * 16, "configured": True,
     })
-    entry = MockConfigEntry(domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address})
+    entry = MockConfigEntry(domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address})
     entry.add_to_hass(hass)
-    with patch("custom_components.b7c_ble.controller.B7cController.send", new=AsyncMock()) as send:
+    with patch("custom_components.b7c_ble.controller.B7CController.send", new=AsyncMock()) as send:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": "light.test_b7c", "hs_color": [240, 75], "brightness": 150},
@@ -171,9 +171,9 @@ async def test_startup_does_not_apply_missing_or_invalid_on_settings(
         "device_key": "22" * 16, "configured": True,
     })
     mock_restore_cache(hass, [State("light.test_b7c", "on", {"brightness": 180})])
-    entry = MockConfigEntry(domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address})
+    entry = MockConfigEntry(domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address})
     entry.add_to_hass(hass)
-    with patch("custom_components.b7c_ble.controller.B7cController.send", new=AsyncMock()) as send:
+    with patch("custom_components.b7c_ble.controller.B7CController.send", new=AsyncMock()) as send:
         assert await hass.config_entries.async_setup(entry.entry_id)
         hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
         await hass.async_block_till_done()
@@ -195,16 +195,16 @@ async def test_startup_restore_failure_is_logged(
         State("light.test_b7c", "on"),
         {"brightness": 180, "color_mode": "hs", "hs_color": [120, 80]},
     )])
-    entry = MockConfigEntry(domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address})
+    entry = MockConfigEntry(domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address})
     entry.add_to_hass(hass)
     with patch(
-        "custom_components.b7c_ble.controller.B7cController.send",
+        "custom_components.b7c_ble.controller.B7CController.send",
         new=AsyncMock(side_effect=HomeAssistantError("Bluetooth failed")),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
         await hass.async_block_till_done()
-        assert "Could not restore B7c light.test_b7c after startup: Bluetooth failed" in caplog.text
+        assert "Could not restore B7C light.test_b7c after startup: Bluetooth failed" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -221,11 +221,11 @@ async def test_user_change_before_startup_prevents_stale_restore(
         State("light.test_b7c", "on"),
         {"brightness": 180, "color_mode": "hs", "hs_color": [120, 80]},
     )])
-    entry = MockConfigEntry(domain=DOMAIN, title="Test B7c", unique_id=address, data={"address": address})
+    entry = MockConfigEntry(domain=DOMAIN, title="Test B7C", unique_id=address, data={"address": address})
     entry.add_to_hass(hass)
     callbacks = []
     with (
-        patch("custom_components.b7c_ble.controller.B7cController.send", new=AsyncMock()) as send,
+        patch("custom_components.b7c_ble.controller.B7CController.send", new=AsyncMock()) as send,
         patch(
             "custom_components.b7c_ble.light.async_at_started",
             side_effect=lambda _hass, callback: callbacks.append(callback) or (lambda: None),

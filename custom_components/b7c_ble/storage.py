@@ -14,19 +14,19 @@ from .const import DOMAIN, SEQUENCE_LIMIT
 def validate_state(state):
     """Reject malformed state instead of risking sequence or key reuse."""
     if not isinstance(state, dict):
-        raise ValueError("invalid B7c mesh state")
+        raise ValueError("invalid B7C mesh state")
     sequence = state.get("next_sequence")
     if type(sequence) is not int or not 1 <= sequence <= SEQUENCE_LIMIT:
-        raise ValueError("invalid B7c mesh sequence")
+        raise ValueError("invalid B7C mesh sequence")
     for field in ("net_key", "app_key"):
         if not isinstance(state.get(field), str) or len(bytes.fromhex(state[field])) != 16:
-            raise ValueError(f"invalid B7c {field}")
+            raise ValueError(f"invalid B7C {field}")
     if "device_key" in state and (
         not isinstance(state["device_key"], str) or len(bytes.fromhex(state["device_key"])) != 16
     ):
-        raise ValueError("invalid B7c device key")
+        raise ValueError("invalid B7C device key")
     if state.get("configured") and "device_key" not in state:
-        raise ValueError("configured B7c has no device key")
+        raise ValueError("configured B7C has no device key")
 
 
 class MeshStore:
