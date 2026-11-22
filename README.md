@@ -60,7 +60,7 @@ The MIT-licensed mesh stack and protocol helpers are adapted from
 `ed4c5921ac10db8953145ef6ec8806113aabaf41`; see [LICENSE](LICENSE).
 Provisioning was changed to persist the device key before sending provisioning
 data. B7c color payloads were verified with the independent standalone
-controller, not this integration.
+controller.
 
 The focused test suite uses the Home Assistant test harness:
 
