@@ -15,7 +15,7 @@ from .mesh.proxy import CHAR_PROXY_DATA_OUT
 from .mesh.session import MeshCredentials, MeshSession, MeshSessionError
 
 _LOGGER = logging.getLogger(__name__)
-IDLE_DISCONNECT_SECONDS = 10
+IDLE_DISCONNECT_SECONDS = 60
 MAX_ACCESS_SEGMENTS = 32
 
 
