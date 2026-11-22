@@ -90,5 +90,4 @@ class MeshStore:
                 os.unlink(name)
 
 
-def mesh_store(hass, address):
-    return MeshStore(hass, address)
+mesh_store = MeshStore
