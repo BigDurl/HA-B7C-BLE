@@ -4,12 +4,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from bleak.exc import BleakCharacteristicNotFoundError
 
 from custom_components.b7c_ble.controller import B7cController, ReservedSession
 from custom_components.b7c_ble.light import B7cLight, hsi_payload
 from custom_components.b7c_ble.mesh import protocol
 from custom_components.b7c_ble.mesh.crypto import EcdhKeyPair, PRCK, aes_cmac, k1, s1
 from custom_components.b7c_ble.mesh.provisioning import Provisioner, ProvisioningData
+from custom_components.b7c_ble.mesh.proxy import CHAR_PROXY_DATA_OUT
 from custom_components.b7c_ble.storage import MeshStore, validate_state
 
 
@@ -57,6 +59,87 @@ async def test_sequence_is_reserved_before_any_mesh_send(tmp_path):
                 pass
         client.write_gatt_char.assert_not_awaited()
         client.disconnect.assert_awaited_once()
+
+
+@pytest.mark.parametrize("retry_succeeds", [True, False])
+@pytest.mark.asyncio
+async def test_missing_proxy_characteristic_retries_without_cached_services(tmp_path, retry_succeeds):
+    store = MeshStore(FakeHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
+             "device_key": "22" * 16}
+    first = SimpleNamespace(
+        disconnect=AsyncMock(),
+        start_notify=AsyncMock(side_effect=BleakCharacteristicNotFoundError(CHAR_PROXY_DATA_OUT)),
+    )
+    second = SimpleNamespace(
+        disconnect=AsyncMock(),
+        start_notify=AsyncMock(
+            side_effect=None if retry_succeeds else BleakCharacteristicNotFoundError(CHAR_PROXY_DATA_OUT)
+        ),
+        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23,
+    )
+    connect = AsyncMock(side_effect=[first, second])
+    with (
+        patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
+        patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
+    ):
+        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        if retry_succeeds:
+            async with controller._session():
+                pass
+        else:
+            with pytest.raises(BleakCharacteristicNotFoundError):
+                async with controller._session():
+                    pass
+    assert [call.kwargs["use_services_cache"] for call in connect.await_args_list] == [True, False]
+    first.disconnect.assert_awaited_once()
+    second.disconnect.assert_awaited_once()
+    assert (await store.async_load())["next_sequence"] == state["next_sequence"]
+
+
+@pytest.mark.asyncio
+async def test_other_missing_characteristic_is_not_retried(tmp_path):
+    store = MeshStore(FakeHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
+             "device_key": "22" * 16}
+    client = SimpleNamespace(
+        disconnect=AsyncMock(),
+        start_notify=AsyncMock(side_effect=BleakCharacteristicNotFoundError("other")),
+    )
+    connect = AsyncMock(return_value=client)
+    with (
+        patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
+        patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
+    ):
+        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        with pytest.raises(BleakCharacteristicNotFoundError):
+            async with controller._session():
+                pass
+    connect.assert_awaited_once()
+    client.disconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_missing_characteristic_after_session_start_is_not_retried(tmp_path):
+    store = MeshStore(FakeHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
+             "device_key": "22" * 16}
+    client = SimpleNamespace(
+        disconnect=AsyncMock(), start_notify=AsyncMock(), stop_notify=AsyncMock(),
+        write_gatt_char=AsyncMock(), mtu_size=23,
+    )
+    connect = AsyncMock(return_value=client)
+    with (
+        patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
+        patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
+    ):
+        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        with pytest.raises(BleakCharacteristicNotFoundError):
+            async with controller._session():
+                raise BleakCharacteristicNotFoundError(CHAR_PROXY_DATA_OUT)
+    connect.assert_awaited_once()
+    client.stop_notify.assert_awaited_once()
+    client.disconnect.assert_awaited_once()
 
 
 @pytest.mark.asyncio

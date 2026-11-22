@@ -53,6 +53,12 @@ Bluetooth connection failures are surfaced to Home Assistant. This initial
 version opens a direct connection per operation and may be slow or unreliable
 on adapters with intermittent connection timeouts.
 
+If the mesh proxy characteristic is missing, the integration reconnects once
+without using Bleak's service cache. If the error persists, restart Home
+Assistant and check its Bluetooth adapter or proxy; this retry cannot clear
+every backend's GATT cache. Keep the existing mesh state and do not reset or
+re-provision the bulb just to troubleshoot this error.
+
 ## Development
 
 The MIT-licensed mesh stack and protocol helpers are adapted from

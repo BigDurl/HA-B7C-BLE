@@ -1,6 +1,6 @@
 {
   "domain": "b7c_ble",
-  "name": "Aputure B7c BLE",
+  "name": "Aputure B7C BLE",
   "bluetooth": [
     {
       "service_uuid": "00001827-0000-1000-8000-00805f9b34fb"

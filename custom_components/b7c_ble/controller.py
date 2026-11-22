@@ -1,16 +1,20 @@
 """Commission and control one B7c over Bluetooth Mesh."""
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
-from bleak.exc import BleakError
+from bleak.exc import BleakCharacteristicNotFoundError, BleakError
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 from homeassistant.components import bluetooth
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, NODE_ADDRESS, SEQUENCE_BLOCK, SEQUENCE_LIMIT, SOURCE_ADDRESS
 from .mesh import protocol
+from .mesh.proxy import CHAR_PROXY_DATA_OUT
 from .mesh.session import MeshCredentials, MeshSession, MeshSessionError
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ReservedSession(MeshSession):
@@ -43,32 +47,44 @@ class B7cController:
         device = bluetooth.async_ble_device_from_address(self.hass, self.address, connectable=True)
         if device is None:
             raise HomeAssistantError(f"B7c {self.address} is not available over Bluetooth")
-        client = await establish_connection(
-            BleakClientWithServiceCache, device, f"{DOMAIN}-{self.address}", timeout=25
-        )
-        try:
-            start = self.state["next_sequence"]
-            end = start + SEQUENCE_BLOCK
-            if end > SEQUENCE_LIMIT:
-                raise HomeAssistantError("B7c mesh sequence space exhausted; reset and re-add the bulb")
-            self.state["next_sequence"] = end
-            await self.store.async_save(self.state)
-            device_key = bytes.fromhex(self.state["device_key"])
-            credentials = MeshCredentials(
-                net_key=bytes.fromhex(self.state["net_key"]),
-                app_key=bytes.fromhex(self.state["app_key"]),
-                provisioner_address=SOURCE_ADDRESS,
-                device_keys={NODE_ADDRESS: device_key},
+        for attempt in range(2):
+            client = await establish_connection(
+                BleakClientWithServiceCache, device, f"{DOMAIN}-{self.address}",
+                timeout=25, use_services_cache=attempt == 0,
             )
-            session = ReservedSession(client, credentials, start, end)
-            await session.start()
             try:
-                await session.set_proxy_filter([SOURCE_ADDRESS])
-                yield session
+                start = self.state["next_sequence"]
+                end = start + SEQUENCE_BLOCK
+                if end > SEQUENCE_LIMIT:
+                    raise HomeAssistantError("B7c mesh sequence space exhausted; reset and re-add the bulb")
+                self.state["next_sequence"] = end
+                await self.store.async_save(self.state)
+                device_key = bytes.fromhex(self.state["device_key"])
+                credentials = MeshCredentials(
+                    net_key=bytes.fromhex(self.state["net_key"]),
+                    app_key=bytes.fromhex(self.state["app_key"]),
+                    provisioner_address=SOURCE_ADDRESS,
+                    device_keys={NODE_ADDRESS: device_key},
+                )
+                session = ReservedSession(client, credentials, start, end)
+                try:
+                    await session.start()
+                except BleakCharacteristicNotFoundError as err:
+                    if attempt or str(err.char_specifier).lower() != CHAR_PROXY_DATA_OUT:
+                        raise
+                    _LOGGER.warning(
+                        "B7c %s is missing the mesh proxy characteristic; reconnecting without cached services",
+                        self.address,
+                    )
+                    continue
+                try:
+                    await session.set_proxy_filter([SOURCE_ADDRESS])
+                    yield session
+                finally:
+                    await session.stop()
+                return
             finally:
-                await session.stop()
-        finally:
-            await client.disconnect()
+                await client.disconnect()
 
     async def configure(self):
         async with self._lock:
