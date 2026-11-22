@@ -10,7 +10,6 @@
   "config_flow": true,
   "dependencies": ["bluetooth"],
   "documentation": "https://github.com/BigDurl/HA-B7C-BLE",
-  "categories": ["lighting.bulbs_lamps"]
   "integration_type": "device",
   "iot_class": "assumed_state",
   "issue_tracker": "https://github.com/BigDurl/HA-B7C-BLE/issues",
