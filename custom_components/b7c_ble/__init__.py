@@ -1,4 +1,4 @@
-"""Aputure B7c BLE integration."""
+"""Aputure B7C BLE integration."""
 
 from bleak.exc import BleakError
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform

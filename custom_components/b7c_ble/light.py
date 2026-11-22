@@ -1,4 +1,4 @@
-"""Home Assistant light entity for a B7c."""
+"""Home Assistant light entity for a B7C."""
 
 import asyncio
 import logging

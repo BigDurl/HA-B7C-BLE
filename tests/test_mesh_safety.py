@@ -12,8 +12,12 @@ from custom_components.b7c_ble.controller import B7cController, ReservedSession
 from custom_components.b7c_ble.light import B7cLight, hsi_payload
 from custom_components.b7c_ble.mesh import protocol
 from custom_components.b7c_ble.mesh.crypto import EcdhKeyPair, PRCK, aes_cmac, k1, s1
+from custom_components.b7c_ble.mesh.pdu import ProxyReassembler
 from custom_components.b7c_ble.mesh.provisioning import Provisioner, ProvisioningData
-from custom_components.b7c_ble.mesh.proxy import CHAR_PROXY_DATA_OUT
+from custom_components.b7c_ble.mesh.proxy import (
+    CHAR_PROXY_DATA_OUT,
+    MeshGattBearer,
+)
 from custom_components.b7c_ble.storage import MeshStore, validate_state
 
 
@@ -26,6 +30,56 @@ class FakeHass:
 
     def async_create_task(self, coro):
         return asyncio.create_task(coro)
+
+
+def fake_services(size=20):
+    return SimpleNamespace(
+        get_characteristic=lambda _: SimpleNamespace(max_write_without_response_size=size)
+    )
+
+
+@pytest.mark.parametrize(("size", "payload_length"), [(20, 70), (64, 70), (64, 10)])
+@pytest.mark.parametrize("provisioning", [False, True])
+@pytest.mark.asyncio
+async def test_bearer_uses_characteristic_write_limit_without_querying_mtu(size, payload_length, provisioning):
+    class Client:
+        services = fake_services(size)
+        write_gatt_char = AsyncMock()
+
+        @property
+        def mtu_size(self):
+            raise AssertionError("MTU must not be queried")
+
+    client = Client()
+    bearer = (
+        MeshGattBearer.provisioning(client, lambda *_: None)
+        if provisioning else MeshGattBearer.proxy(client, lambda *_: None)
+    )
+    msg_type = 3 if provisioning else 0
+    payload = bytes(range(payload_length))
+    await bearer.send(msg_type, payload)
+    chunks = [call.args[1] for call in client.write_gatt_char.await_args_list]
+    assert all(len(chunk) <= size for chunk in chunks)
+    assert len(chunks) == (len(payload) + size - 2) // (size - 1)
+    reassembler = ProxyReassembler()
+    result = None
+    for chunk in chunks:
+        result = reassembler.push(chunk)
+    assert result == (msg_type, payload)
+
+
+@pytest.mark.asyncio
+async def test_bearer_rejects_missing_input_characteristic():
+    client = SimpleNamespace(services=SimpleNamespace(get_characteristic=lambda _: None))
+    with pytest.raises(BleakCharacteristicNotFoundError):
+        await MeshGattBearer.proxy(client, lambda *_: None).send(0, b"test")
+
+
+@pytest.mark.asyncio
+async def test_bearer_rejects_invalid_write_limit():
+    client = SimpleNamespace(services=fake_services(1))
+    with pytest.raises(BleakError, match="Invalid mesh GATT write size"):
+        await MeshGattBearer.proxy(client, lambda *_: None).send(0, b"test")
 
 
 def test_invalid_sequence_is_rejected():
@@ -105,7 +159,7 @@ async def test_missing_proxy_characteristic_retries_without_cached_services(tmp_
         start_notify=AsyncMock(
             side_effect=None if retry_succeeds else BleakCharacteristicNotFoundError(CHAR_PROXY_DATA_OUT)
         ),
-        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23,
+        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), services=fake_services(),
     )
     connect = AsyncMock(side_effect=[first, second])
     with (
@@ -155,7 +209,7 @@ async def test_missing_characteristic_after_session_start_is_not_retried(tmp_pat
              "device_key": "22" * 16}
     client = SimpleNamespace(
         disconnect=AsyncMock(), start_notify=AsyncMock(), stop_notify=AsyncMock(),
-        write_gatt_char=AsyncMock(), mtu_size=23,
+        write_gatt_char=AsyncMock(), services=fake_services(),
     )
     connect = AsyncMock(return_value=client)
     with (
@@ -258,7 +312,7 @@ async def test_connection_reused_then_closed_when_idle(tmp_path):
              "device_key": "22" * 16}
     client = SimpleNamespace(
         is_connected=True, disconnect=AsyncMock(), start_notify=AsyncMock(),
-        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23,
+        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), services=fake_services(),
     )
     connect = AsyncMock(return_value=client)
     with (
@@ -291,7 +345,7 @@ async def test_connection_reconnects_after_drop_and_write_failure(tmp_path):
              "device_key": "22" * 16}
     clients = [
         SimpleNamespace(is_connected=True, disconnect=AsyncMock(), start_notify=AsyncMock(),
-                        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23)
+                        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), services=fake_services())
         for _ in range(3)
     ]
     connect = AsyncMock(side_effect=clients)
@@ -320,7 +374,7 @@ async def test_connection_reopens_before_reserved_sequences_are_exhausted(tmp_pa
              "device_key": "22" * 16}
     client = SimpleNamespace(
         is_connected=True, disconnect=AsyncMock(), start_notify=AsyncMock(),
-        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23,
+        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), services=fake_services(),
     )
     connect = AsyncMock(return_value=client)
     with (

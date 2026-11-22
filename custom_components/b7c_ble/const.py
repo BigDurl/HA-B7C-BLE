@@ -1,4 +1,4 @@
-"""Constants for the B7c Bluetooth integration."""
+"""Constants for the B7C Bluetooth integration."""
 
 DOMAIN = "b7c_ble"
 PROVISIONING_UUID = "00001827-0000-1000-8000-00805f9b34fb"

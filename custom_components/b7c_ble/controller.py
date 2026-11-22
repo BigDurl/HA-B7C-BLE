@@ -1,4 +1,4 @@
-"""Commission and control one B7c over Bluetooth Mesh."""
+"""Commission and control one B7C over Bluetooth Mesh."""
 
 import asyncio
 import logging

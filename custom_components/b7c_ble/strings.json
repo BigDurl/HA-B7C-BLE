@@ -6,7 +6,7 @@
         "data": {"address": "Bluetooth address"}
       },
       "confirm": {
-        "title": "Provision Aputure B7c",
+        "title": "Provision Aputure B7C",
         "description": "Provision {address} into a new Home Assistant mesh. This removes it from its previous mesh. Factory-reset it first. To recover an interrupted provisioning attempt, submit this form again."
       }
     },
@@ -18,8 +18,8 @@
     "abort": {
       "already_configured": "This bulb is already configured.",
       "in_progress": "This bulb is already being provisioned.",
-      "no_devices": "No reset B7c bulbs were found.",
-      "not_b7c": "This is not a B7c bulb."
+      "no_devices": "No reset B7C bulbs were found.",
+      "not_b7c": "This is not a B7C bulb."
     }
   }
 }

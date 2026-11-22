@@ -1,13 +1,13 @@
-# Aputure B7c BLE for Home Assistant
+# Aputure B7C BLE for Home Assistant
 
-Bluetooth control for Aputure Accent B7c bulbs: on/off,
+Bluetooth control for Aputure Accent B7C bulbs: on/off,
 brightness, white temperature and hue/saturation. No cloud or phone is needed.
 
 ## Requirements
 
 - Home Assistant 2026.10.4 or later with an available Bluetooth adapter or an
   active-connection Bluetooth proxy in range of each bulb.
-- A factory-reset B7c. Provisioning **removes it from its previous mesh**,
+- A factory-reset B7C. Provisioning **removes it from its previous mesh**,
   including Sidus Link or standalone controller. Each bulb must be reset
   and added separately; this integration cannot import existing mesh keys.
 
@@ -36,10 +36,8 @@ After Home Assistant starts or the integration is reloaded, it reapplies each
 bulb's last saved on/off state and, when on, its brightness and color. The last
 brightness and color are also remembered while a bulb is off. This can change
 a bulb that was adjusted while Home Assistant was offline. If no valid saved
-state is available, no default is sent at startup. The previous integration
-version did not save light settings, so set each bulb after upgrading to
-establish a state to restore. Restore failures are logged; commands remain
-unacknowledged. Home Assistant periodically saves restore state and saves it
+state is available, no default is sent at startup. Restore failures are logged;
+commands remain unacknowledged. Home Assistant periodically saves restore state and saves it
 at a clean shutdown, so an abrupt interruption may lose recent changes.
 
 The private `.storage/b7c_ble_<address>` file in Home Assistant's config
@@ -64,6 +62,8 @@ reuses each bulb's connection during adjustments and disconnects after 60
 seconds of inactivity. Rapid pending adjustments are combined, while on/off
 commands stay ordered. The first adjustment still requires a connection, and
 multiple bulbs may briefly occupy multiple Bluetooth connection slots.
+Bluetooth mesh messages are segmented using the connection's reported
+write-without-response limit, without relying on BlueZ's default MTU warning.
 
 If the mesh proxy characteristic is missing, the integration reconnects once
 without using Bleak's service cache. If the error persists, restart Home
@@ -77,7 +77,7 @@ The MIT-licensed mesh stack and protocol helpers are adapted from
 [HA-Amaran-BLE](https://github.com/nhazdun/HA-Amaran-BLE), commit
 `ed4c5921ac10db8953145ef6ec8806113aabaf41`; see [LICENSE](LICENSE).
 Provisioning was changed to persist the device key before sending provisioning
-data. B7c color payloads were verified with the independent standalone
+data. B7C color payloads were verified with an independent standalone
 controller.
 
 The focused test suite uses the Home Assistant test harness:

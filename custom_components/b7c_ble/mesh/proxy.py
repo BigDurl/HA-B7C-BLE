@@ -14,7 +14,7 @@ from typing import Any
 
 from bleak import BleakClient
 from bleak.backends.characteristic import BleakGATTCharacteristic
-from bleak.exc import BleakError
+from bleak.exc import BleakCharacteristicNotFoundError, BleakError
 
 from .pdu import ProxyReassembler, proxy_segment
 
@@ -29,9 +29,6 @@ CHAR_PROVISIONING_DATA_OUT = "00002adc-0000-1000-8000-00805f9b34fb"
 SERVICE_PROXY = "00001828-0000-1000-8000-00805f9b34fb"
 CHAR_PROXY_DATA_IN = "00002add-0000-1000-8000-00805f9b34fb"
 CHAR_PROXY_DATA_OUT = "00002ade-0000-1000-8000-00805f9b34fb"
-
-#: Conservative proxy PDU size when the negotiated ATT MTU is unknown.
-DEFAULT_MTU = 20
 
 PduHandler = Callable[[int, bytes], Coroutine[Any, Any, None] | None]
 
@@ -66,16 +63,6 @@ class MeshGattBearer:
         """Bearer bound to the Mesh Proxy Service."""
         return cls(client, CHAR_PROXY_DATA_IN, CHAR_PROXY_DATA_OUT, on_pdu)
 
-    @property
-    def mtu(self) -> int:
-        """Usable proxy PDU size, i.e. the ATT MTU minus the 3-byte ATT header."""
-        try:
-            mtu = int(self._client.mtu_size) - 3
-        except (BleakError, AttributeError, TypeError, ValueError, OSError, NotImplementedError) as err:
-            _LOGGER.debug("Could not read BLE MTU, using minimum: %s", err)
-            return DEFAULT_MTU
-        return max(DEFAULT_MTU, mtu)
-
     async def start(self) -> None:
         """Subscribe to the data-out characteristic."""
         await self._client.start_notify(self._data_out, self._handle_notify)
@@ -89,12 +76,18 @@ class MeshGattBearer:
 
     async def send(self, msg_type: int, payload: bytes) -> None:
         """Frame and write a payload, segmenting it if it exceeds the MTU."""
-        pdus = proxy_segment(msg_type, payload, self.mtu)
+        characteristic = self._client.services.get_characteristic(self._data_in)
+        if characteristic is None:
+            raise BleakCharacteristicNotFoundError(self._data_in)
+        size = characteristic.max_write_without_response_size
+        if size < 2:
+            raise BleakError(f"Invalid mesh GATT write size: {size}")
+        pdus = proxy_segment(msg_type, payload, size)
         _LOGGER.debug(
             "GATT TX %s type=%d mtu=%d %s",
             self._data_in[4:8],
             msg_type,
-            self.mtu,
+            size,
             " ".join(p.hex() for p in pdus),
         )
         async with self._write_lock:

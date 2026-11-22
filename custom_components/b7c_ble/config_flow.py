@@ -1,4 +1,4 @@
-"""Discover and provision reset B7c bulbs."""
+"""Discover and provision reset B7C bulbs."""
 
 import logging
 import secrets
