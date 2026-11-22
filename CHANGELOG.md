@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0
+## 1.0.0
 
 Initial release of the Aputure Accent B7C Home Assistant integration.
 
