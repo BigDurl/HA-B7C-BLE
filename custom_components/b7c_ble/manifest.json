@@ -6,6 +6,7 @@
       "service_uuid": "00001827-0000-1000-8000-00805f9b34fb"
     }
   ],
+  "categories": ["lighting.bulbs_lamps"],
   "codeowners": ["@BigDurl"],
   "config_flow": true,
   "dependencies": ["bluetooth"],
