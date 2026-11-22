@@ -1,0 +1,7 @@
+.storage/
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.venv/
+.coverage
+mesh.json

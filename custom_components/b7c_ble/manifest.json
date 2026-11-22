@@ -1,0 +1,18 @@
+{
+  "domain": "b7c_ble",
+  "name": "Aputure B7c BLE",
+  "bluetooth": [
+    {
+      "service_uuid": "00001827-0000-1000-8000-00805f9b34fb"
+    }
+  ],
+  "codeowners": ["@BigDurl"],
+  "config_flow": true,
+  "dependencies": ["bluetooth"],
+  "documentation": "https://github.com/BigDurl/HA-B7C-BLE",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/BigDurl/HA-B7C-BLE/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

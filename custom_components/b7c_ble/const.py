@@ -1,0 +1,8 @@
+"""Constants for the B7c Bluetooth integration."""
+
+DOMAIN = "b7c_ble"
+PROVISIONING_UUID = "00001827-0000-1000-8000-00805f9b34fb"
+NODE_ADDRESS = 2
+SOURCE_ADDRESS = 1
+SEQUENCE_BLOCK = 2048
+SEQUENCE_LIMIT = 1 << 24
