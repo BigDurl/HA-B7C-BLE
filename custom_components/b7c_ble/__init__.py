@@ -1,7 +1,7 @@
 """Aputure B7c BLE integration."""
 
 from bleak.exc import BleakError
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 
 from .controller import B7cController
@@ -25,9 +25,15 @@ async def async_setup_entry(hass, entry):
         raise ConfigEntryNotReady(f"Could not configure B7c {address}: {err}") from err
     entry.runtime_data = controller
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, controller.async_close)
+    )
     return True
 
 
 async def async_unload_entry(hass, entry):
     """Unload the light without deleting its recovery keys."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        await entry.runtime_data.async_close()
+    return unloaded

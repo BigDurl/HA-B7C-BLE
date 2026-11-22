@@ -1,10 +1,12 @@
 """Tests for provisioning and durable mesh state."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from bleak.exc import BleakCharacteristicNotFoundError
+from bleak.exc import BleakCharacteristicNotFoundError, BleakError
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.b7c_ble.controller import B7cController, ReservedSession
 from custom_components.b7c_ble.light import B7cLight, hsi_payload
@@ -21,6 +23,9 @@ class FakeHass:
 
     async def async_add_executor_job(self, func, *args):
         return func(*args)
+
+    def async_create_task(self, coro):
+        return asyncio.create_task(coro)
 
 
 def test_invalid_sequence_is_rejected():
@@ -39,6 +44,30 @@ async def test_storage_is_private_and_write_failure_is_not_hidden(tmp_path):
         with pytest.raises(OSError, match="disk failure"):
             await store.async_save({**state, "next_sequence": 4097})
     assert await store.async_load() == state
+
+
+@pytest.mark.asyncio
+async def test_cancelled_save_waits_for_durable_write(tmp_path):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class DelayedHass(FakeHass):
+        async def async_add_executor_job(self, func, *args):
+            started.set()
+            await release.wait()
+            return func(*args)
+
+    store = MeshStore(DelayedHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 2049, "net_key": "00" * 16, "app_key": "11" * 16}
+    task = asyncio.create_task(store.async_save(state))
+    await started.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert store._load() == state
 
 
 @pytest.mark.asyncio
@@ -220,3 +249,156 @@ async def test_light_does_not_update_optimistic_state_after_failed_send():
     assert light.is_on is True
     assert light.hs_color == (120.0, 100.0)
     assert light.brightness == 102
+
+
+@pytest.mark.asyncio
+async def test_connection_reused_then_closed_when_idle(tmp_path):
+    store = MeshStore(FakeHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
+             "device_key": "22" * 16}
+    client = SimpleNamespace(
+        is_connected=True, disconnect=AsyncMock(), start_notify=AsyncMock(),
+        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23,
+    )
+    connect = AsyncMock(return_value=client)
+    with (
+        patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
+        patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
+        patch("custom_components.b7c_ble.controller.IDLE_DISCONNECT_SECONDS", 0.02),
+    ):
+        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        await controller.send(protocol.sleep(True))
+        sequence = controller._active_session.sequence
+        old_generation = controller._idle_generation
+        await controller.send(protocol.sleep(False))
+        assert controller._active_session.sequence > sequence
+        await controller._disconnect_idle(old_generation)
+        connect.assert_awaited_once()
+        client.disconnect.assert_not_awaited()
+        await asyncio.sleep(0.06)
+        client.disconnect.assert_awaited_once()
+        await controller.send(protocol.sleep(True))
+        assert connect.await_count == 2
+        assert (await store.async_load())["next_sequence"] == state["next_sequence"]
+        await controller.async_close()
+        assert client.disconnect.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_connection_reconnects_after_drop_and_write_failure(tmp_path):
+    store = MeshStore(FakeHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
+             "device_key": "22" * 16}
+    clients = [
+        SimpleNamespace(is_connected=True, disconnect=AsyncMock(), start_notify=AsyncMock(),
+                        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23)
+        for _ in range(3)
+    ]
+    connect = AsyncMock(side_effect=clients)
+    with (
+        patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
+        patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
+    ):
+        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        await controller.send(protocol.sleep(True))
+        clients[0].is_connected = False
+        await controller.send(protocol.sleep(True))
+        assert connect.await_count == 2
+        clients[1].write_gatt_char.side_effect = BleakError("write failed")
+        with pytest.raises(HomeAssistantError, match="write failed"):
+            await controller.send(protocol.sleep(False))
+        clients[1].disconnect.assert_awaited_once()
+        await controller.send(protocol.sleep(False))
+        assert connect.await_count == 3
+        await controller.async_close()
+
+
+@pytest.mark.asyncio
+async def test_connection_reopens_before_reserved_sequences_are_exhausted(tmp_path):
+    store = MeshStore(FakeHass(tmp_path), "AA:BB:CC:DD:EE:FF")
+    state = {"next_sequence": 1, "net_key": "00" * 16, "app_key": "11" * 16,
+             "device_key": "22" * 16}
+    client = SimpleNamespace(
+        is_connected=True, disconnect=AsyncMock(), start_notify=AsyncMock(),
+        stop_notify=AsyncMock(), write_gatt_char=AsyncMock(), mtu_size=23,
+    )
+    connect = AsyncMock(return_value=client)
+    with (
+        patch("custom_components.b7c_ble.controller.bluetooth.async_ble_device_from_address", return_value=object()),
+        patch("custom_components.b7c_ble.controller.establish_connection", new=connect),
+    ):
+        controller = B7cController(store._hass, "AA:BB:CC:DD:EE:FF", store, state)
+        await controller.send(protocol.sleep(True))
+        end = controller._active_session._end
+        controller._active_session._sequence = end - 31
+        await controller.send(protocol.sleep(False))
+        assert connect.await_count == 2
+        assert controller._active_session.sequence > end
+        assert (await store.async_load())["next_sequence"] == controller._active_session._end
+        await controller.async_close()
+
+
+@pytest.mark.asyncio
+async def test_adjustment_queue_merges_pending_values_and_preserves_power_order():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def send(*_payloads):
+        if not started.is_set():
+            started.set()
+            await release.wait()
+
+    controller = SimpleNamespace(send=AsyncMock(side_effect=send))
+    entry = SimpleNamespace(unique_id="AA:BB:CC:DD:EE:FF", runtime_data=controller, title="Test")
+    light = B7cLight(entry)
+    with patch.object(light, "async_write_ha_state"):
+        first = asyncio.create_task(light.async_turn_on(brightness=50))
+        await started.wait()
+        pending = [
+            asyncio.create_task(light.async_turn_on(hs_color=(120, 100))),
+            asyncio.create_task(light.async_turn_on(brightness=200)),
+            asyncio.create_task(light.async_turn_off()),
+            asyncio.create_task(light.async_turn_on(color_temp_kelvin=4000)),
+        ]
+        await asyncio.sleep(0)
+        release.set()
+        await asyncio.gather(first, *pending)
+    calls = controller.send.await_args_list
+    assert len(calls) == 4
+    assert calls[1].args == (hsi_payload(120, 100, round(200 * 1000 / 255)),)
+    assert calls[2].args == (protocol.sleep(False),)
+    assert calls[3].args == (protocol.sleep(True), protocol.cct(round(200 * 1000 / 255), 400))
+    assert light.is_on is True
+    assert light.brightness == 200
+    assert light.color_temp_kelvin == 4000
+
+
+@pytest.mark.asyncio
+async def test_coalesced_callers_receive_send_failure():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def send(*_payloads):
+        if not started.is_set():
+            started.set()
+            await release.wait()
+            return
+        raise HomeAssistantError("Bluetooth failed")
+
+    controller = SimpleNamespace(send=AsyncMock(side_effect=send))
+    entry = SimpleNamespace(unique_id="AA:BB:CC:DD:EE:FF", runtime_data=controller, title="Test")
+    light = B7cLight(entry)
+    with patch.object(light, "async_write_ha_state"):
+        first = asyncio.create_task(light.async_turn_on(brightness=50))
+        await started.wait()
+        pending = [
+            asyncio.create_task(light.async_turn_on(brightness=100)),
+            asyncio.create_task(light.async_turn_on(brightness=200)),
+        ]
+        await asyncio.sleep(0)
+        release.set()
+        results = await asyncio.gather(first, *pending, return_exceptions=True)
+    assert results[0] is None
+    assert all(isinstance(result, HomeAssistantError) for result in results[1:])
+    assert controller.send.await_count == 2
+    assert light.brightness == 50

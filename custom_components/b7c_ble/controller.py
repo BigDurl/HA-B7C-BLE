@@ -15,6 +15,8 @@ from .mesh.proxy import CHAR_PROXY_DATA_OUT
 from .mesh.session import MeshCredentials, MeshSession, MeshSessionError
 
 _LOGGER = logging.getLogger(__name__)
+IDLE_DISCONNECT_SECONDS = 10
+MAX_ACCESS_SEGMENTS = 32
 
 
 class ReservedSession(MeshSession):
@@ -22,6 +24,7 @@ class ReservedSession(MeshSession):
 
     def __init__(self, client, credentials, start, end):
         super().__init__(client, credentials, sequence=start)
+        self.client = client
         self._end = end
 
     def _next_seq(self):
@@ -41,6 +44,11 @@ class B7cController:
         self.store = store
         self.state = state
         self._lock = asyncio.Lock()
+        self._active_context = None
+        self._active_session = None
+        self._idle_handle = None
+        self._idle_generation = 0
+        self._closed = False
 
     @asynccontextmanager
     async def _session(self):
@@ -105,11 +113,79 @@ class B7cController:
             self.state["provisioning"] = "complete"
             await self.store.async_save(self.state)
 
+    def _cancel_idle(self):
+        self._idle_generation += 1
+        if self._idle_handle is not None:
+            self._idle_handle.cancel()
+            self._idle_handle = None
+
+    async def _disconnect(self):
+        self._cancel_idle()
+        context = self._active_context
+        self._active_context = None
+        self._active_session = None
+        if context is not None:
+            await context.__aexit__(None, None, None)
+
+    async def _disconnect_idle(self, generation):
+        async with self._lock:
+            if self._idle_handle is None or generation != self._idle_generation:
+                return
+            try:
+                await self._disconnect()
+            except (BleakError, TimeoutError, OSError) as err:
+                _LOGGER.warning("Could not disconnect idle B7c %s: %s", self.address, err)
+
+    def _schedule_idle_disconnect(self):
+        self._cancel_idle()
+        loop = asyncio.get_running_loop()
+        self._idle_handle = loop.call_later(
+            IDLE_DISCONNECT_SECONDS, self._start_idle_disconnect, self._idle_generation
+        )
+
+    def _start_idle_disconnect(self, generation):
+        self.hass.async_create_task(self._disconnect_idle(generation))
+
+    async def async_close(self, _event=None):
+        """Close the active connection during unload or shutdown."""
+        async with self._lock:
+            self._closed = True
+            await self._disconnect()
+
     async def send(self, *payloads):
         async with self._lock:
+            if self._closed:
+                raise HomeAssistantError(f"B7c {self.address} is unloading")
+            self._cancel_idle()
+            sent = False
             try:
-                async with self._session() as session:
-                    for payload in payloads:
-                        await session.send_access(NODE_ADDRESS, protocol.VENDOR_OPCODE, payload)
+                session = self._active_session
+                if session is not None and (
+                    not session.client.is_connected
+                    or session._end - session.sequence < MAX_ACCESS_SEGMENTS
+                ):
+                    await self._disconnect()
+                    session = None
+                if session is None:
+                    context = self._session()
+                    session = await context.__aenter__()
+                    self._active_context = context
+                    self._active_session = session
+                for payload in payloads:
+                    if session._end - session.sequence < MAX_ACCESS_SEGMENTS:
+                        await self._disconnect()
+                        context = self._session()
+                        session = await context.__aenter__()
+                        self._active_context = context
+                        self._active_session = session
+                    await session.send_access(NODE_ADDRESS, protocol.VENDOR_OPCODE, payload)
+                sent = True
             except (BleakError, MeshSessionError, TimeoutError, OSError) as err:
                 raise HomeAssistantError(f"Could not send to B7c {self.address}: {err}") from err
+            finally:
+                if not sent:
+                    try:
+                        await self._disconnect()
+                    except (BleakError, TimeoutError, OSError) as cleanup_err:
+                        _LOGGER.warning("Could not disconnect B7c %s: %s", self.address, cleanup_err)
+            self._schedule_idle_disconnect()

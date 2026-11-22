@@ -49,9 +49,11 @@ then delete only that bulb's matching `.storage/b7c_ble_<address>` file and
 add it again. Removing keys without resetting can strand the bulb. To return
 to Sidus Link, factory-reset it and add it there.
 
-Bluetooth connection failures are surfaced to Home Assistant. This initial
-version opens a direct connection per operation and may be slow or unreliable
-on adapters with intermittent connection timeouts.
+Bluetooth connection failures are surfaced to Home Assistant. The integration
+reuses each bulb's connection during adjustments and disconnects after 10
+seconds of inactivity. Rapid pending adjustments are combined, while on/off
+commands stay ordered. The first adjustment still requires a connection, and
+multiple bulbs may briefly occupy multiple Bluetooth connection slots.
 
 If the mesh proxy characteristic is missing, the integration reconnects once
 without using Bleak's service cache. If the error persists, restart Home

@@ -1,5 +1,8 @@
 """Home Assistant light entity for a B7c."""
 
+import asyncio
+from collections import deque
+
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_COLOR_TEMP_KELVIN,
@@ -49,8 +52,74 @@ class B7cLight(LightEntity):
         self._attr_color_mode = ColorMode.COLOR_TEMP
         self._attr_color_temp_kelvin = 5600
         self._attr_hs_color = (0.0, 100.0)
+        self._pending = deque()
+        self._worker = None
 
     async def async_turn_on(self, **kwargs):
+        await self._enqueue(True, kwargs)
+
+    async def async_turn_off(self, **kwargs):
+        await self._enqueue(False, kwargs)
+
+    async def _enqueue(self, turn_on, kwargs):
+        future = asyncio.get_running_loop().create_future()
+        if turn_on and self._pending and self._pending[-1][0]:
+            _, pending, waiters = self._pending[-1]
+            if ATTR_HS_COLOR in kwargs:
+                pending.pop(ATTR_COLOR_TEMP_KELVIN, None)
+            elif ATTR_COLOR_TEMP_KELVIN in kwargs:
+                pending.pop(ATTR_HS_COLOR, None)
+            pending.update(kwargs)
+            waiters.append(future)
+        else:
+            self._pending.append((turn_on, dict(kwargs), [future]))
+        if self._worker is None:
+            self._worker = asyncio.create_task(self._process_pending())
+        await future
+
+    async def _process_pending(self):
+        waiters = []
+        operation = None
+        try:
+            while self._pending:
+                turn_on, kwargs, waiters = self._pending.popleft()
+                operation = asyncio.create_task(
+                    self._turn_on(**kwargs) if turn_on else self._turn_off()
+                )
+                await asyncio.wait({operation})
+                error = None if operation.cancelled() else operation.exception()
+                for future in waiters:
+                    if future.done():
+                        continue
+                    if operation.cancelled():
+                        future.cancel()
+                    elif error is not None:
+                        future.set_exception(error)
+                    else:
+                        future.set_result(None)
+                operation = None
+                waiters = []
+        finally:
+            if operation is not None:
+                if not operation.done():
+                    operation.cancel()
+                await asyncio.gather(operation, return_exceptions=True)
+            for future in waiters:
+                if not future.done():
+                    future.cancel()
+            for _, _, pending_waiters in self._pending:
+                for future in pending_waiters:
+                    if not future.done():
+                        future.cancel()
+            self._pending.clear()
+            self._worker = None
+
+    async def async_will_remove_from_hass(self):
+        if self._worker is not None:
+            await self._worker
+        await super().async_will_remove_from_hass()
+
+    async def _turn_on(self, **kwargs):
         brightness = kwargs.get(ATTR_BRIGHTNESS, self._attr_brightness)
         intensity = round(brightness * 1000 / 255)
         payloads = []
@@ -81,7 +150,7 @@ class B7cLight(LightEntity):
         self._attr_hs_color = hs
         self.async_write_ha_state()
 
-    async def async_turn_off(self, **kwargs):
+    async def _turn_off(self):
         await self._controller.send(protocol.sleep(False))
         self._attr_is_on = False
         self.async_write_ha_state()

@@ -1,5 +1,6 @@
 """Private, durable per-bulb mesh state."""
 
+import asyncio
 import copy
 import json
 import os
@@ -56,7 +57,19 @@ class MeshStore:
 
     async def async_save(self, state):
         validate_state(state)
-        await self._hass.async_add_executor_job(self._save, copy.deepcopy(state))
+        write = asyncio.ensure_future(
+            self._hass.async_add_executor_job(self._save, copy.deepcopy(state))
+        )
+        try:
+            await asyncio.shield(write)
+        except asyncio.CancelledError:
+            while not write.done():
+                try:
+                    await asyncio.shield(write)
+                except asyncio.CancelledError:
+                    continue
+            write.result()
+            raise
 
     def _save(self, state):
         self.path.parent.mkdir(parents=True, exist_ok=True)
