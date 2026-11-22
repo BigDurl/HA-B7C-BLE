@@ -1,18 +1,20 @@
 """Aputure B7C BLE integration."""
 
-from bleak.exc import BleakError
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
-from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
-
-from .controller import B7CController
-from .mesh.session import MeshSessionError
-from .storage import mesh_store
-
-PLATFORMS = [Platform.LIGHT]
+PLATFORMS = []
 
 
 async def async_setup_entry(hass, entry):
     """Load a commissioned bulb and finish configuration if necessary."""
+    from bleak.exc import BleakError
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
+    from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+
+    from .controller import B7CController
+    from .mesh.session import MeshSessionError
+    from .storage import mesh_store
+
+    global PLATFORMS
+    PLATFORMS = [Platform.LIGHT]
     address = entry.data["address"]
     store = mesh_store(hass, address)
     state = await store.async_load()

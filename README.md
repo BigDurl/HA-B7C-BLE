@@ -80,6 +80,20 @@ Provisioning was changed to persist the device key before sending provisioning
 data. B7C color payloads were verified with an independent standalone
 controller.
 
+## Python package
+
+Build and install the standalone distribution:
+
+```sh
+python -m pip install build
+python -m build
+python -m pip install dist/ha_b7c_ble-1.0.0-py3-none-any.whl
+```
+
+The package exposes the integration as `custom_components.b7c_ble`. It does not
+copy files into a Home Assistant configuration directory; use the Marketplace
+installation above when installing the integration into Home Assistant.
+
 The focused test suite uses the Home Assistant test harness:
 
 ```sh

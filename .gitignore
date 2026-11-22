@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 .coverage
 mesh.json
+dist/
+build/
+*.egg-info/
